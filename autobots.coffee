@@ -11,8 +11,13 @@ class World
   mouse = null
   aggro = null
   players = null
+  badniks = null
   currentAggro = null
   wayPoints = null
+  playersOldParam1 = null
+  playersOldParam2 = null
+  badniksOldParam1 = null
+  badniksOldParam2 = null
 
   constructor: ->
     console?.log('World create.')
@@ -23,14 +28,19 @@ class World
     @mouse = {x:0, y:0}
     @aggro = []
     @players = []
+    @badniks = []
     @playersOldParam1 = []
     @playersOldParam2 = []
+    @badniksOldParam1 = []
+    @badniksOldParam2 = []
     @wayPoints = []
 
     @config = {
       shootRadius: 305
       playerHalf: 16
-      autoShoot: false
+      autoShootOnPlayer: false
+      autoShootOnBadnik: false
+      autoShootPriority: 'player'
       autoRun: false
       autoStopWhenRun: false
       autoRunToPoint: 0
@@ -42,13 +52,14 @@ class World
   loadMap: (pMap) ->
     @map = []
     for plan in pMap
-      p = {
-        x: plan.x
-        y: plan.y
-        w: plan.w
-        h: plan.h
-      }
-      @map.push(p)
+      if (plan.c == true)
+        p = {
+          x: plan.x
+          y: plan.y
+          w: plan.w
+          h: plan.h
+        }
+        @map.push(p)
 
   setPlayer: (player) ->
     @player = player
@@ -170,11 +181,45 @@ class World
     for p in players
       @players.push({
         name: p.name
+        type: 'player'
         x: p.x
         y: p.y
         hp: p.HP
         w: p.w
         h: p.h
+      })
+
+
+  loadBadniks: (badniks) ->
+    @badniksOldParam2 = []
+    for b in @badniksOldParam1
+      @badniksOldParam2.push({
+        type: 'badnik'
+        name: ''
+        x: b.x
+        y: b.y
+      })
+
+    @badniksOldParam1 = []
+    for b in @badniks
+      @badniksOldParam1.push({
+        type: 'badnik'
+        name: ''
+        x: b.x
+        y: b.y
+      })
+
+    @badniks = []
+    for b in badniks
+      @badniks.push({
+        type: 'badnik'
+        name: ''
+        x: b.x
+        y: b.y
+        hp: b.HP
+        w: b.w
+        h: b.h
+        a: b.a
       })
 
 
@@ -223,20 +268,6 @@ class World
       @context.moveTo(xPl, yPl)
       @context.lineTo(xPl - wPl, yPl - hPl)
       @context.stroke()
-
-#      p = @getFirstCollision(
-#        [
-#          @player.x
-#          @player.y  - @config.playerHalf
-#        ]
-#        [
-#          @player.x - @canvas.w/2 + @mouse.x
-#          @player.y - @canvas.h/2 + @mouse.y
-#        ]
-#        @config.shootRadius + @config.playerHalf
-#        @map
-#        true
-#      )
 
       if (@config.selectWayPoint)
         point = @getFirstCollision(
@@ -365,12 +396,12 @@ class World
       return null
 
 
-  shootInAggroPlayers: (debugDraw) ->
+  shootInAggro: (debugDraw) ->
     if (!@player?)
       return 0
 
-    ignorePlayers = []
-    aggroPlayers = []
+    ignoreTarget = []
+    aggroTarget = []
 
     for player in @players
       if (player.name == @player.name)
@@ -379,18 +410,35 @@ class World
       for aggroName in @aggro
         if (player.name == aggroName)
           isAggro = true
-          aggroPlayers.push(player)
+          aggroTarget.push(player)
       if (!isAggro)
-        ignorePlayers.push(player)
+        ignoreTarget.push(player)
+
+    if (@config.autoShootOnBadnik == true)
+      for badnik in @badniks
+        if (badnik.a == true)
+          aggroTarget.push(badnik)
+    else
+      for badnik in @badniks
+        if (badnik.a == true)
+          ignoreTarget.push(badnik)
 
     mapIgnore = []
-    for player in ignorePlayers
-      mapIgnore.push({
-        x: player.x - 16
-        y: player.y - 32
-        w: 32
-        h: 32
-      })
+    for target in ignoreTarget
+      if (target.type == 'player')
+        mapIgnore.push({
+          x: target.x - 16
+          y: target.y - 32
+          w: 32
+          h: 32
+        })
+      else if (target.type == 'badnik')
+        mapIgnore.push({
+          x: target.x - 16
+          y: target.y - 16
+          w: 32
+          h: 32
+        })
 
     for m in @map
       mapIgnore.push({
@@ -403,105 +451,119 @@ class World
     if (debugDraw)
       @drawMap(mapIgnore)
 
-    for aggroName in @aggro
-      for player in aggroPlayers
-        if (player.name == aggroName)
-          if (debugDraw)
-            @context.strokeStyle = '#CCCCCC'
-            @context.strokeRect(
-              player.x - 6 - @player.x + @canvas.w/2
-              player.y - 6 - @player.y + @canvas.h/2 - @config.playerHalf
-              13
-              13
-            )
+    for target in aggroTarget
+      if (((name for name in @aggro when target.name == name) and @config.autoShootOnPlayer == true) or (target.type == 'badnik' and @config.autoShootOnBadnik == true))
 
-          d = distance(
+        if (target.type == 'player')
+          correctY = @config.playerHalf
+        else
+          correctY = 0
+
+        if (debugDraw)
+          @context.strokeStyle = '#CCCCCC'
+          @context.strokeRect(
+            target.x - 6 - @player.x + @canvas.w/2
+            target.y - 6 - @player.y + @canvas.h/2 - correctY
+            13
+            13
+          )
+
+        d = distance(
+          @player.x
+          @player.y - @config.playerHalf
+          target.x
+          target.y - correctY
+        )
+        if (d > (@config.shootRadius + correctY))
+          continue
+
+        dif = @getDifForPlayer(target)
+        if (!dif?)
+          dif = [0, 0]
+
+        p = @getFirstCollision(
+          [
             @player.x
             @player.y - @config.playerHalf
-            player.x
-            player.y - @config.playerHalf
-          )
-          if (d > (@config.shootRadius + @config.playerHalf))
-            continue
+          ]
+          [
+            target.x + dif[0]* d
+            target.y - correctY + dif[1] * d
+          ]
+          @config.shootRadius + @config.playerHalf
+          mapIgnore
+          debugDraw
+        )
 
-          dif = @getDifForPlayer(player.name)
-          if (!dif?)
-            dif = [0, 0]
+        if (p)
+          continue
 
-          p = @getFirstCollision(
-            [
-              @player.x
-              @player.y - @config.playerHalf
-            ]
-            [
-              player.x + dif[0]* d
-              player.y - @config.playerHalf + dif[1] * d
-            ]
-            @config.shootRadius + @config.playerHalf
-            mapIgnore
-            debugDraw
+        if (debugDraw)
+          @context.strokeStyle = '#FFFFFF'
+          @context.strokeRect(
+            target.x - 5 - @player.x + @canvas.w/2 + dif[0] * d
+            target.y - 5 - @player.y + @canvas.h/2 - correctY + dif[1] * d
+            11
+            11
           )
 
-          if (p)
-            continue
-
-          if (debugDraw)
-            @context.strokeStyle = '#FFFFFF'
-            @context.strokeRect(
-              player.x - 5 - @player.x + @canvas.w/2 + dif[0] * d
-              player.y - 5 - @player.y + @canvas.h/2 - @config.playerHalf + dif[1] * d
-              11
-              11
-            )
-
-          if (!@config.notShoot and @config.autoShoot)
-            @shoot([
-              -(player.y - @player.y + dif[1] * d)
-              -(player.x - @player.x + dif[0] * d)
-            ])
-            @config.notShoot = true
-            window.setTimeout( =>
-              @config.notShoot = false
-            ,
-              700
-            )
-          return 0
+        if (!@config.notShoot and (@config.autoShootOnPlayer or @config.autoShootOnBadnik))
+          @shoot([
+            -(target.y - @player.y + @config.playerHalf - correctY + dif[1] * d)
+            -(target.x - @player.x + dif[0] * d)
+          ])
+          @config.notShoot = true
+          window.setTimeout( =>
+            @config.notShoot = false
+          ,
+            700
+          )
+        return 0
 
 
 
-  getDifForPlayer: (name) ->
-    for p in @players
-      if (p.name == name)
-        pNow = [p.x, p.y]
+  getDifForPlayer: (target) ->
 
-    for p in @playersOldParam1
-      if (p.name == name)
-        pOld1 = [p.x, p.y]
+    if (target.type == 'player')
+      name = target.name
 
-    for p in @playersOldParam2
-      if (p.name == name)
-        pOld2 = [p.x, p.y]
+      for p in @players
+        if (p.name == name)
+          pNow = [p.x, p.y]
 
-    sigma = []
-    if (pNow? and pOld1? and pOld2?)
-      if (pNow[0] - pOld2[0] == 0)
-        sigma[0] = 0.05           # It's MAGIC NUMBER
-      else
-        if (Math.abs(pNow[0] - pOld1[0]) > Math.abs(pOld1[0] - pOld2[0]))
-          sigma[0] = 0.05
+      for p in @playersOldParam1
+        if (p.name == name)
+          pOld1 = [p.x, p.y]
+
+      for p in @playersOldParam2
+        if (p.name == name)
+          pOld2 = [p.x, p.y]
+
+      sigma = []
+      if (pNow? and pOld1? and pOld2?)
+        if (pNow[0] - pOld2[0] == 0)
+          sigma[0] = 0.05           # It's MAGIC NUMBER
         else
-          sigma[0] = 0.05
+          if (Math.abs(pNow[0] - pOld1[0]) > Math.abs(pOld1[0] - pOld2[0]))
+            sigma[0] = 0.05
+          else
+            sigma[0] = 0.05
 
-      if (pNow[1] - pOld2[1] == 0)
-        sigma[1] = 0.06
-      else
-        if (Math.abs(pNow[1] - pOld1[1]) > Math.abs(pOld1[1] - pOld2[1]))
-          sigma[1] = 0.07
+        if (pNow[1] - pOld2[1] == 0)
+          sigma[1] = 0.06
         else
-          sigma[1] = 0.05
-      return [(pNow[0] - pOld2[0])/2 * sigma[0], (pNow[1] - pOld2[1])/2 * sigma[1]]
-    else
-     return null
+          if (Math.abs(pNow[1] - pOld1[1]) > Math.abs(pOld1[1] - pOld2[1]))
+            sigma[1] = 0.07
+          else
+            sigma[1] = 0.05
+        return [(pNow[0] - pOld2[0])/2 * sigma[0], (pNow[1] - pOld2[1])/2 * sigma[1]]
+      else
+       return null
+
+    else if (target.type == 'badnik')
+      return [0, 0]
+
+    return null
 
 
   autoRunOnWay: (debugDraw) ->
@@ -527,7 +589,7 @@ class World
         @config.autoRunToPoint = @config.autoRunToPoint + 1
         return null
 
-      res = @runToPoint(@wayPoints[@config.autoRunToPoint], 20)
+      res = @runToPoint(@wayPoints[@config.autoRunToPoint], 16)
       if (res == true)
         @config.autoRunToPoint = @config.autoRunToPoint + 1
       return null
@@ -579,11 +641,18 @@ class World
   getContext: () ->
     return @context
 
-  getAutoShoot: () ->
-    return @config.autoShoot
+  getAutoShootOnPlayer: () ->
+    return @config.autoShootOnPlayer
 
-  setAutoShoot: (boo) ->
-    @config.autoShoot = boo
+  setAutoShootOnPlayer: (boo) ->
+    @config.autoShootOnPlayer = boo
+    return this
+
+  getAutoShootOnBadnik: () ->
+    return @config.autoShootOnBadnik
+
+  setAutoShootOnBadnik: (boo) ->
+    @config.autoShootOnBadnik = boo
     return this
 
   getAutoRun: () ->
@@ -683,7 +752,8 @@ jQuery('document').ready( =>
     window.cvWorld.setMouse(window.mX, window.mY)
     window.cvWorld.loadMapAtFrame(window.level)
     window.cvWorld.loadPlayers(window.p)
-    window.cvWorld.shootInAggroPlayers(window.cvConfig.debugDraw)
+    window.cvWorld.loadBadniks(window.badniks)
+    window.cvWorld.shootInAggro(window.cvConfig.debugDraw)
     window.cvWorld.autoRunOnWay(window.cvConfig.debugDraw)
 
     if (window.cvConfig.debugDraw)
@@ -739,13 +809,17 @@ jQuery('#game').after(
   </style>
   <div class="cv-control">
     <div>
-      <span id="autoshoot" class="cv-button">Auto Shoot</span>
+      <span id="autoshoot-on-player" class="cv-button">Auto Shoot on player</span>
+      <span id="autoshoot-on-badnik" class="cv-button">Auto Shoot on badnik</span>
+      Privilege: <span id="autoshoot-privilege" class="cv-button">player</span>
+      <input id="aggro-input" value="aggro (separate come)" class="cv-input">
+      <span id="aggro-send" class="cv-button">Send aggro</span>
+    </div>
+    <div>
       <span id="autorun" class="cv-button">Auto Run</span>
       <span id="select-way-point" class="cv-button">Add way point</span>
       <span id="add-stop-way-point" class="cv-button">Stop way point (7c)</span>
       <span id="delete-way-points" class="cv-button">Delete way points</span>
-      <input id="aggro-input" value="aggro (separate come)" class="cv-input">
-      <span id="aggro-send" class="cv-button">Send aggro</span>
     </div>
     <div>
       <span id="debugDraw" class="cv-button">Debug Draw</span>
@@ -759,13 +833,22 @@ addWayPoint = () ->
   window.cvWorld.setSelectWayPoint(false)
   window.cvWorld.selectNextWayPoint()
 
-jQuery('#autoshoot').click( () =>
-  if (window.cvWorld.getAutoShoot() != true)
-    window.cvWorld.setAutoShoot(true)
-    jQuery('#autoshoot').addClass('cv-push')
+jQuery('#autoshoot-on-player').click( () =>
+  if (window.cvWorld.getAutoShootOnPlayer() != true)
+    window.cvWorld.setAutoShootOnPlayer(true)
+    jQuery('#autoshoot-on-player').addClass('cv-push')
   else
-    window.cvWorld.setAutoShoot(false)
-    jQuery('#autoshoot').removeClass('cv-push')
+    window.cvWorld.setAutoShootOnPlayer(false)
+    jQuery('#autoshoot-on-player').removeClass('cv-push')
+)
+
+jQuery('#autoshoot-on-badnik').click( () =>
+  if (window.cvWorld.getAutoShootOnBadnik() != true)
+    window.cvWorld.setAutoShootOnBadnik(true)
+    jQuery('#autoshoot-on-badnik').addClass('cv-push')
+  else
+    window.cvWorld.setAutoShootOnBadnik(false)
+    jQuery('#autoshoot-on-badnik').removeClass('cv-push')
 )
 
 jQuery('#autorun').click( () =>
