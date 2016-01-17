@@ -1,3 +1,4 @@
+
 # MIT License
 # Created by Chip Viled
 
@@ -50,7 +51,7 @@ class World
     }
 
   loadMap: (pMap) ->
-    @map = []
+    nMap = []
     for plan in pMap
       if (plan.c == true)
         p = {
@@ -59,7 +60,76 @@ class World
           w: plan.w
           h: plan.h
         }
-        @map.push(p)
+        nMap.push(p)
+    fMap = @convertCollizionMap(nMap)
+    @map = []
+    for plan in fMap
+      p = {
+        x: parseInt(plan.x, 10)
+        y: parseInt(plan.y, 10)
+        w: parseInt(plan.w, 10)
+        h: parseInt(plan.h, 10)
+      }
+      @map.push(p)
+    console?.log(@map)
+    return 0
+
+
+  convertCollizionMap: (map) ->
+    delta = 0.1
+    getMap = []
+    cMap = []
+    tempMap = []
+    for val in map
+      p = {
+        x: val.x
+        y: val.y
+        w: val.w
+        h: val.h
+        used: false
+      }
+      getMap.push(p)
+
+    for val, key in getMap
+      if (val.used == true) then continue
+      val.used = true
+      h = val.h
+      for rVal, rKey in getMap
+        if (rVal.used == true) then continue
+        if (val.y + h - delta <= rVal.y and val.y + h + delta >= rVal.y and val.x - delta <= rVal.x and val.x + delta >= rVal.x)
+          h = h + rVal.h
+          rVal.used = true
+      p = {
+        x: val.x
+        y: val.y
+        w: val.w
+        h: h
+        used: false
+      }
+      tempMap.push(p)
+
+    for val, key in tempMap
+      if (val.used == true) then continue
+      val.used = true
+      w = val.w
+      for rVal, rKey in tempMap
+        if (rVal.used == true) then continue
+        if (val.x + w - delta <= rVal.x and val.x + w + delta >= rVal.x and val.y - delta <= rVal.y and val.y + delta >= rVal.y and val.h - delta <= rVal.h and val.h + delta >= rVal.h)
+          w = w + rVal.w
+          rVal.used = true
+      p = {
+        x: val.x
+        y: val.y
+        w: w
+        h: val.h
+        used: false
+      }
+      cMap.push(p)
+    tempMap = null
+    getMap = null
+#    console?.log(cMap)
+    return cMap
+
 
   setPlayer: (player) ->
     @player = player
@@ -750,7 +820,7 @@ jQuery('document').ready( =>
     window.cvWorld.incFrame()
     window.cvWorld.setPlayer(window.localPlayer)
     window.cvWorld.setMouse(window.mX, window.mY)
-    window.cvWorld.loadMapAtFrame(window.level)
+#    window.cvWorld.loadMapAtFrame(window.level)
     window.cvWorld.loadPlayers(window.p)
     window.cvWorld.loadBadniks(window.badniks)
     window.cvWorld.shootInAggro(window.cvConfig.debugDraw)
@@ -822,6 +892,7 @@ jQuery('#game').after(
       <span id="delete-way-points" class="cv-button">Delete way points</span>
     </div>
     <div>
+      <span id="load-map" class="cv-button">(Re)Load Map</span>
       <span id="debugDraw" class="cv-button">Debug Draw</span>
     </div>
   </div>
@@ -898,6 +969,11 @@ jQuery('#debugDraw').click( () =>
   else
     window.cvConfig.debugDraw = false
     jQuery('#debugDraw').removeClass('cv-push')
+)
+
+jQuery('#load-map').click( () =>
+  window.cvWorld.loadMap(window.level)
+  return 0
 )
 
 
