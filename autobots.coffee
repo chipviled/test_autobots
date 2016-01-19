@@ -61,7 +61,8 @@ class World
           h: plan.h
         }
         nMap.push(p)
-    fMap = @convertCollizionMap(nMap)
+    fMap = nMap
+#    fMap = @convertCollizionMap(nMap)
     @map = []
     for plan in fMap
       p = {
@@ -71,10 +72,11 @@ class World
         h: parseInt(plan.h, 10)
       }
       @map.push(p)
-    console?.log(@map)
+#    console?.log(@map)
     return 0
 
 
+  # Include in server. Not used anymore in client.
   convertCollizionMap: (map) ->
     delta = 0.1
     getMap = []
@@ -329,7 +331,7 @@ class World
       yPl = @canvas.h/2 - @config.playerHalf
       wPl = xPl - @mouse.x
       hPl = yPl - @mouse.y
-      d = distance(xPl, yPl, @mouse.x, @mouse.y)
+      d = @distance(xPl, yPl, @mouse.x, @mouse.y)
       wPl = wPl / d * @config.shootRadius
       hPl = hPl / d * @config.shootRadius
 
@@ -538,7 +540,7 @@ class World
             13
           )
 
-        d = distance(
+        d = @distance(
           @player.x
           @player.y - @config.playerHalf
           target.x
